@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { UserController, ProductController, LikeController, CommentController, CartController } = require('../controllers');
+const { UserController, ProductController, LikeController, CommentController, CartController, OrderController } = require('../controllers');
 const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 const MessageController = require('../controllers/message-controller');
@@ -35,15 +35,33 @@ router.put("/users/:id", authenticateToken, upload.single('avatar'), UserControl
 router.put("/updaterole", authenticateToken, upload.single('avatar'), UserController.updateRole);
 router.delete("/deleteuser", authenticateToken, UserController.deleteUser);
 
-router.post("/product", authenticateToken, upload.single('avatar'), ProductController.createProduct, upload.single('avatar'));
+// router.post("/product", authenticateToken, upload.array('avatar', 10), ProductController.createProduct, upload.single('avatar'));
+router.post(
+  "/product",
+  authenticateToken,
+  upload.fields(
+    Array.from({ length: 20 }, (_, i) => ({ name: `${i}`, maxCount: 10 }))
+  ),
+  ProductController.createProduct
+);
 router.get("/product", authenticateToken, ProductController.getAllProducts);
 router.get("/product/:id", authenticateToken, ProductController.getProductById);
+// router.get("/product", ProductController.getAllProducts);
+// router.get("/product/:id", ProductController.getProductById);
 router.delete("/product/:id", authenticateToken, ProductController.deleteProduct);
-router.put("/product/:id", authenticateToken, upload.single('avatar'), ProductController.updateProduct);
+// router.put("/product/:id", authenticateToken, upload.array('avatar', 10), ProductController.updateProduct);
+router.put(
+  "/product/:id",
+  authenticateToken,
+  upload.fields(
+    Array.from({ length: 20 }, (_, i) => ({ name: `${i}`, maxCount: 10 }))
+  ),
+  ProductController.updateProduct
+);
 
-router.post("/likes", authenticateToken, LikeController.likeProduct);
+router.post("/likes/rate", authenticateToken, LikeController.rateProduct);
 router.delete("/likes", authenticateToken, LikeController.unlikeProduct);
-router.delete("/deletelikeProduct", authenticateToken, LikeController.deletelikeProduct);
+router.delete("/likes/deleteRating", authenticateToken, LikeController.deleteRating);
 
 
 router.post("/comments/:id", authenticateToken, CommentController.createComment);
@@ -51,15 +69,33 @@ router.delete("/comments/:id", authenticateToken, CommentController.deleteCommen
 router.delete("/deleteAdminComment/:id", authenticateToken, CommentController.deleteAdminComment);
 
 router.put("/comments/:id", authenticateToken, CommentController.updateComment);
-router.get('/:productid/comments', CommentController.getAllComments);
+
+// router.get('/:productid/comments', CommentController.getAllComments);
+router.get('/comments/:productid', CommentController.getAllComments);
+
+router.get('/commentsvisable/pending', authenticateToken, CommentController.getPendingComments);
+router.put('/comments/moderate/:id', authenticateToken, CommentController.moderateComment);
 
 // router.post("/chat/:id", authenticateToken, ChatController.createChat);
 
 // router.post("/message/:id", authenticateToken, MessageController.createMessage);
 // router.put("/message/:id", authenticateToken, MessageController.updateMessage);
 
+router.post('/orders', authenticateToken, OrderController.createOrder);
+router.delete('/orders/:id', authenticateToken, OrderController.deleteOrder);
+router.get('/orders', authenticateToken, OrderController.getUserOrders);       // Все заказы пользователя
+router.get('/orders/:id', authenticateToken, OrderController.getOrderById)
+router.post('/orders/check', authenticateToken, OrderController.checkProductAvailability)
+
+router.get('/admin/orders', authenticateToken, OrderController.getAllOrders);
+router.get('/admin/orders/user/:userId', authenticateToken, OrderController.getOrdersByUserId);
+
+
+
+
 router.put('/cart', authenticateToken, CartController.addToCart);
 router.delete('/cart', authenticateToken, CartController.removeFromCart);
 router.get('/cart', authenticateToken, CartController.getCart);
+router.put('/cart/update-quantity', authenticateToken, CartController.updateQuantity);
 
 module.exports = router;

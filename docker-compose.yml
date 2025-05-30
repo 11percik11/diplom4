@@ -9,19 +9,18 @@ services:
       - db
       - react-app
     environment:
-      DATABASE_URL: "mongodb://daniilbaderin:password@db:27017/mydatabase?authSource=admin&directConnection=true"
+      DATABASE_URL: "mongodb://daniiltest2:password@localhost:27017/mydatabase?authSource=admin&directConnection=true"
  db: # База данных
     image: prismagraphql/mongo-single-replica:5.0.3
     ports:
       - '27017:27017'
     environment:
-      MONGO_INITDB_ROOT_USERNAME: daniilbaderin
+      MONGO_INITDB_ROOT_USERNAME: daniiltest2
       MONGO_INITDB_ROOT_PASSWORD: password
  react-app: # React-приложение
-    build: ../diplomproject-frontend # Путь к вашему React-приложению относительно корня вашего проекта
+    build: ../frontend/my-app # Путь к вашему React-приложению относительно корня вашего проекта
     ports:
       - '80:80' # Порт, на котором будет доступно ваше React-приложение
-      - '8000:8000'
-      - '443:443'
-    volumes:
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - '8000:8000' # Порт, на котором будет доступно ваше React-приложение
+volumes:
+ react_app:

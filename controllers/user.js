@@ -9,10 +9,10 @@ const uuid = require("uuid");
 
 const UserController = {
   register: async (req, res) => {
-    const { email, password, name } = req.body;
+    const { email, password, name, phone } = req.body;
 
     // Проверяем поля на существование
-    if (!email || !password || !name) {
+    if (!email || !password || !name || !phone) {
       return res.status(400).json({ error: "Все поля обязательны" });
     }
     // res.send(email, password, name);
@@ -33,7 +33,7 @@ const UserController = {
       const avatarPath = path.join(__dirname, "/../uploads", avatarName);
       fs.writeFileSync(avatarPath, png);
 
-      const refreshToken = jwt.sign(email, process.env.REFREH_SECRET_KEY);
+      // const refreshToken = jwt.sign(email, process.env.REFREH_SECRET_KEY);
 
       // Создаем пользователя
       const user = await prisma.user.create({
@@ -41,8 +41,9 @@ const UserController = {
           email,
           password: hashedPassword,
           name,
+          phone,
           avatarUrl: `/uploads/${avatarName}`,
-          refreshToken: refreshToken,
+          // refreshToken: refreshToken,
           activatedLink: activationLink,
         },
       });
@@ -104,7 +105,10 @@ const UserController = {
       }
 
       if (!user.isActivated) {
-        return res.status(403).json({ error: "Аккаунт не активирован. Пожалуйста, проверьте вашу почту для активации." });
+        return res.status(403).json({
+          error:
+            "Аккаунт не активирован. Пожалуйста, проверьте вашу почту для активации.",
+        });
       }
 
       const token = jwt.sign({ userId: user.id }, process.env.SECRET_KEY, {
@@ -113,6 +117,7 @@ const UserController = {
       const refreshToken = jwt.sign(
         { userId: user.id },
         process.env.REFREH_SECRET_KEY,
+
         { expiresIn: "5d" }
       );
 
@@ -199,29 +204,52 @@ const UserController = {
   },
 
   current: async (req, res) => {
-    // res.send(req.user.userId)
-    try {
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.userId },
-        include: {
-          products: true,
-          likes: true,
-          comments: true,
-          chat: true,
-          cart: true,
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      include: {
+        products: {
+          include: {
+            variants: {
+              include: {
+                images: true,
+              },
+            },
+          },
         },
-      });
+        likes: true,
+        comments: true,
+        chat: true,
+        cart: {
+          include: {
+            items: {
+              include: {
+                product: {
+                  include: {
+                    variants: {
+                      include: {
+                        images: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
 
-      if (!user) {
-        return res.status(400).json({ error: "Не удалось найти пользователя" });
-      }
-
-      return res.status(200).json(user);
-    } catch (error) {
-      console.log("err", error);
-      res.status(500).json({ error: "Что-то пошло не так" });
+    if (!user) {
+      return res.status(400).json({ error: "Не удалось найти пользователя" });
     }
-  },
+
+    return res.status(200).json(user);
+  } catch (error) {
+    console.log("err", error);
+    res.status(500).json({ error: "Что-то пошло не так" });
+  }
+},
 
   allUsers: async (req, res) => {
     try {
@@ -259,7 +287,7 @@ const UserController = {
 
       // Проверяем refreshToken
       const decoded = jwt.verify(refreshToken, process.env.REFREH_SECRET_KEY);
-
+      // console.log(refreshToken)
       // Ищем пользователя в БД
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
@@ -276,6 +304,7 @@ const UserController = {
       const newToken = jwt.sign({ userId: user.id }, process.env.SECRET_KEY, {
         expiresIn: "10m",
       });
+
       const newRefreshToken = jwt.sign(
         { userId: user.id },
         process.env.REFREH_SECRET_KEY,
@@ -349,6 +378,19 @@ const UserController = {
       if (!id) {
         return res.status(400).json({ error: "Не указан ID пользователя" });
       }
+
+      await prisma.cartItem.deleteMany({
+        where: {
+          cart: {
+            userId: id,
+          },
+        },
+      });
+
+      await prisma.cart.deleteMany({
+        where: { userId: id },
+      });
+
       // res.send(id)
       const userID = await prisma.user.findUnique({
         where: { id: req.user.userId },
@@ -362,6 +404,9 @@ const UserController = {
         },
       });
 
+      if (id == req.user.userId) {
+        return res.status(400).json({ error: "Нельзя удалить самого себя" });
+      }
       // res.json(userID)
       if (userID.role != "ADMIN") {
         return res.status(400).json({ error: "У вас нет на это прав" });
@@ -388,8 +433,10 @@ const UserController = {
   },
 
   updateRole: async (req, res) => {
-    const { id, name, phone, role } = req.body;
+    const { id, name, phone, role, isActivated } = req.body;
     const file = req.file;
+
+    const activated = isActivated == "true";
 
     if (!id) {
       return res.status(400).json({ error: "Не указан ID пользователя" });
@@ -398,34 +445,27 @@ const UserController = {
     try {
       const userID = await prisma.user.findUnique({
         where: { id: req.user.userId },
-        include: {
-          email: false,
-          products: true,
-          likes: true,
-          comments: true,
-          chat: true,
-          cart: true,
-        },
       });
 
-      // res.json(userID)
-      if (userID.role != "ADMIN") {
-        return res.status(400).json({ error: "У вас нет на это прав" });
+      if (userID.role !== "ADMIN") {
+        return res.status(403).json({ error: "Нет прав" });
       }
 
       const user = await prisma.user.update({
         where: { id },
         data: {
           name: name || undefined,
-          avatarUrl: file ? `/uploads/${file.filename}` : undefined,
           phone: phone || undefined,
           role: role || undefined,
+          isActivated: activated, // 👈 boolean сюда
+          avatarUrl: file ? `/uploads/${file.filename}` : undefined,
         },
       });
+
       res.json(user);
     } catch (error) {
-      console.log("error", error);
-      res.status(500).json({ error: "Что-то пошло не так" });
+      console.error("Update error:", error);
+      res.status(500).json({ error: "Ошибка сервера" });
     }
   },
 

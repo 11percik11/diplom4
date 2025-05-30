@@ -1,35 +1,27 @@
-const createError = require('http-errors');
 const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const fs = require('fs')
-const cors = require('cors')
+const cors = require('cors');
+// const yookassa = require('yookassa');
 require('dotenv').config();
+const YooKassa = require('yookassa');
+const kassa = new YooKassa({
+  shopId: process.env.SHOP_ID,
+  secretKey: process.env.SHOP_SECRET,
+});
 
 const app = express();
-
-// const allowedOrigins = [
-//   process.env.BASE_URL_FRONT,
-//   "http://localhost:3000",
-//   "http://localhost:80"
-// ].filter(Boolean);
-
-// app.use(cors(
-// //   {
-// //   // origin: process.env.BASE_URL_FRONT || "http://localhost:3000" || "http://localhost:80", // Укажите ваш фронтенд-домен
-// //   origin: true,
-// //   origin: allowedOrigins,
-// //   // credentials: true, // Разрешить куки и авторизацию
-// //   // methods: ['GET', 'POST', 'PUT', 'DELETE'], // Разрешенные методы
-// //   // allowedHeaders: ['Content-Type', 'Authorization'], // Разрешенные заголовки
-// // }
-// ));
 
 const allowedOrigins = [
   `http://${process.env.BASE_URL}`,
   `http://${process.env.BASE_URL}:80`,
   `http://${process.env.BASE_URL}:3000`,
+  `http://localhost:3000`,
+  `http://localhost`,
+  `http://localhost:80`,
+  'http://localhost:5173',
   process.env.BASE_URL_FRONT
 ].filter(Boolean);
 
@@ -48,6 +40,30 @@ app.set('view engine', 'pug');
 app.use('/uploads', express.static('uploads'))
 
 app.use('/api', require('./routes'));
+
+
+
+app.post("/api/create-payment", async (req, res) => {
+  try {
+    const { amount, description } = req.body;
+
+    const payment = await kassa.createPayment({
+      amount: { value: amount.toFixed(2), currency: "RUB" },
+      capture: true,
+      confirmation: {
+        type: "embedded",
+      },
+      description: description || "Оплата заказа",
+    });
+    console.log("Создан платёж:", payment)
+    res.json(payment);
+  } catch (err) {
+    console.error("Ошибка платежа:", err.response?.data || err.message || err);
+    res.status(500).json({ error: "Ошибка создания платежа" });
+  }
+});
+
+
 
 if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");

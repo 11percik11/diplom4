@@ -8,25 +8,27 @@ datasource db {
 }
 
 model User {
-  id            String     @id @default(auto()) @map("_id") @db.ObjectId
-  password      String
-  email         String     @unique
-  role          UserRole   @default(CLIENT)
-  name          String
-  phone         String?
-  avatarUrl     String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  refreshToken  String
-  isActivated   Boolean    @default(false)
-  activatedLink String     @unique
-  products      Product[]
-  likes         Like[]
-  comments      Comment[]
-  chat          Chat[]
-  UserChat      UserChat[]
-  Message       Message[]
-  cart          Cart[]
+  id                String     @id @default(auto()) @map("_id") @db.ObjectId
+  password          String
+  email             String     @unique
+  role              UserRole   @default(CLIENT)
+  name              String
+  phone             String?
+  avatarUrl         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  refreshToken      String?
+  isActivated       Boolean    @default(false)
+  activatedLink     String     @unique
+  products          Product[]
+  likes             Like[]
+  comments          Comment[]
+  chat              Chat[]
+  UserChat          UserChat[]
+  Message           Message[]
+  cart              Cart[]
+  purchasedProducts String[]   @db.ObjectId // 🔹 Массив ID купленных товаров
+  orders            Order[] // 🔹 Связь с заказами
 }
 
 enum UserRole {
@@ -36,41 +38,50 @@ enum UserRole {
 }
 
 model Product {
-  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
   title       String
   description String
   price       Float
-  avatarUrl   String?
+  userId      String           @db.ObjectId
+  user        User             @relation(fields: [userId], references: [id])
+  createdAt   DateTime         @default(now())
+  sex         String
+  model       String
+  age         String 
+  variants    ProductVariant[] // 👉 связь с вариантами товара
   likes       Like[]
   comments    Comment[]
-  userId      String     @db.ObjectId
-  user        User       @relation(fields: [userId], references: [id])
-  cartItems   CartItem[] // Связь через промежуточную таблицу CartItem
-  createdAt   DateTime   @default(now())
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
 }
 
-model Comment {
-  id        String  @id @default(auto()) @map("_id") @db.ObjectId
-  text      String
-  userId    String  @db.ObjectId
-  user      User    @relation(fields: [userId], references: [id])
-  productId String  @db.ObjectId
-  product   Product @relation(fields: [productId], references: [id])
+model ProductVariant {
+  id        String         @id @default(auto()) @map("_id") @db.ObjectId
+  productId String         @db.ObjectId
+  product   Product        @relation(fields: [productId], references: [id])
+  color     String // 👉 Цвет варианта
+  images    ProductImage[] // 👉 Изображения для этого цвета
+  sizes     SizeEntry[] // 👉 Размеры и наличие для этого цвета
+  orderItems OrderItem[] @relation(name: "OrderItemToVariant")
 }
 
-model Like {
-  id        String  @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String  @db.ObjectId
-  user      User    @relation(fields: [userId], references: [id])
-  productId String  @db.ObjectId
-  product   Product @relation(fields: [productId], references: [id])
+model ProductImage {
+  id        String         @id @default(auto()) @map("_id") @db.ObjectId
+  url       String
+  variantId String         @db.ObjectId
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+}
+
+type SizeEntry {
+  size     String
+  quantity Int
 }
 
 model Cart {
   id        String     @id @default(auto()) @map("_id") @db.ObjectId
   userId    String     @unique @db.ObjectId
   user      User       @relation(fields: [userId], references: [id])
-  items     CartItem[] // Связь через промежуточную таблицу CartItem
+  items     CartItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 }
@@ -82,8 +93,70 @@ model CartItem {
   productId String   @db.ObjectId
   product   Product  @relation(fields: [productId], references: [id])
   quantity  Int
+  variantId String   @db.ObjectId 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  size String
+}
+
+model Comment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  text      String
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+  productId String   @db.ObjectId
+  product   Product  @relation(fields: [productId], references: [id])
+  visible   Boolean  @default(false)
+  createdAt DateTime @default(now()) // 🔹 Новое поле
+}
+
+// model Like {
+//   id        String  @id @default(auto()) @map("_id") @db.ObjectId
+//   userId    String  @db.ObjectId
+//   user      User    @relation(fields: [userId], references: [id])
+//   productId String  @db.ObjectId
+//   product   Product @relation(fields: [productId], references: [id])
+// }
+
+model Like {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String  @db.ObjectId
+  user      User    @relation(fields: [userId], references: [id])
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
+
+  rating Int @default(1) // Значение от 1 до 5
+}
+
+enum DeliveryMethod {
+  pickup
+  courier
+}
+
+model Order {
+  id              String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String         @db.ObjectId
+  user            User           @relation(fields: [userId], references: [id])
+  items           OrderItem[]
+  totalPrice      Float
+  status          String // Пример: "pending", "shipped", "delivered"
+  deliveryMethod  DeliveryMethod
+  deliveryAddress String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model OrderItem {
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  orderId    String         @db.ObjectId
+  order      Order          @relation(fields: [orderId], references: [id])
+  productId  String         @db.ObjectId
+  product    Product        @relation(fields: [productId], references: [id])
+  variantId  String         @db.ObjectId
+  variant ProductVariant @relation(name: "OrderItemToVariant", fields: [variantId], references: [id])
+  quantity   Int
+  size       String
 }
 
 model Chat {
@@ -95,8 +168,6 @@ model Chat {
   User      User?      @relation(fields: [userId], references: [id])
   userId    String?    @db.ObjectId
 }
-
-
 
 model UserChat {
   id     String  @id @default(auto()) @map("_id") @db.ObjectId
