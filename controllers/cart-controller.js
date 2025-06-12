@@ -6,11 +6,9 @@ const CartController = {
     const userId = req.user.userId;
 
     if (!productId || !variantId || !size) {
-      return res
-        .status(400)
-        .json({
-          error: "Не указаны обязательные поля: productId, variantId или size",
-        });
+      return res.status(400).json({
+        error: "Не указаны обязательные поля: productId, variantId или size",
+      });
     }
 
     const requestedQty = Number(quantity) > 0 ? Number(quantity) : 1;
@@ -159,10 +157,12 @@ const CartController = {
             include: {
               product: {
                 include: {
+                  discounts: true, // 🔹 скидки на товар
                   variants: {
                     include: {
                       images: true,
                       sizes: true,
+                      discounts: true, // 🔹 скидки на варианты
                     },
                   },
                 },
@@ -223,11 +223,9 @@ const CartController = {
       const sizeEntry = variant.sizes.find((s) => s.size === item.size);
 
       if (!sizeEntry) {
-        return res
-          .status(400)
-          .json({
-            error: `Размер ${item.size} не найден у выбранного варианта`,
-          });
+        return res.status(400).json({
+          error: `Размер ${item.size} не найден у выбранного варианта`,
+        });
       }
 
       if (action === "increment") {

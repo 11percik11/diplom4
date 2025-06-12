@@ -2,34 +2,6 @@
 const { prisma } = require("../prisma/prisma-client");
 
 const CommentController = {
-  // createComment: async (req, res) => {
-  //   // console.log('hello');
-  //   try {
-  //     const { id } = req.params;
-  //     const { text } = req.body;
-  //     const userId = req.user.userId;
-  //     if (!id || !text || !userId) {
-  //       return res.status(400).json({ error: 'Все поля обязательны' });
-  //     }
-  //     const product = await prisma.product.findUnique({where: {id}})
-  //     if (!product) {
-  //       return res.status(404).json({error: "Продукт не найден"})
-  //     }
-
-  //     const comment = await prisma.comment.create({
-  //       data: {
-  //         productId: id,
-  //         userId,
-  //         text
-  //       },
-  //     });
-
-  //     res.json(comment);
-  //   } catch (error) {
-  //     console.error('Error creating comment:', error);
-  //     res.status(500).json({ error: 'Не удалось создать комментарий' });
-  //   }
-  // },
   createComment: async (req, res) => {
   try {
     const { id } = req.params; // id продукта
@@ -256,45 +228,85 @@ const CommentController = {
     }
   },
   getPendingComments: async (req, res) => {
-    try {
-      const userId = req.user.userId;
+  try {
+    const userId = req.user.userId;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
 
-      const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || (user.role !== "ADMIN" && user.role !== "MANAGER")) {
+      return res
+        .status(403)
+        .json({ error: "Недостаточно прав для просмотра комментариев" });
+    }
+
+    // ✅ Читаем query параметр `hidden` как boolean
+    const hidden = req.query.hidden === 'true';
+
+    const comments = await prisma.comment.findMany({
+      where: {
+        visible: false,
+        hidden, // 🔹 учитываем значение фильтра
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+          },
+        },
+        product: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    res.json(comments);
+  } catch (error) {
+    console.error("Ошибка при получении непроверенных комментариев:", error);
+    res.status(500).json({ error: "Не удалось получить список" });
+  }
+},
+
+    setCommentHidden: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { hidden } = req.body; // ожидаем boolean
+      const userId = req.user?.userId;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
 
       if (!user || (user.role !== "ADMIN" && user.role !== "MANAGER")) {
-        return res
-          .status(403)
-          .json({ error: "Недостаточно прав для просмотра комментариев" });
+        return res.status(403).json({ error: "Недостаточно прав" });
       }
 
-      const comments = await prisma.comment.findMany({
-        where: {
-          visible: false,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              avatarUrl: true,
-            },
-          },
-          product: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
+      const comment = await prisma.comment.findUnique({ where: { id } });
+
+      if (!comment) {
+        return res.status(404).json({ error: "Комментарий не найден" });
+      }
+
+      const updatedComment = await prisma.comment.update({
+        where: { id },
+        data: {
+          hidden: Boolean(hidden),
         },
       });
 
-      res.json(comments);
+      res.json({
+        message: `Комментарий ${hidden ? "скрыт" : "показан"}`,
+        comment: updatedComment,
+      });
     } catch (error) {
-      console.error("Ошибка при получении непроверенных комментариев:", error);
-      res.status(500).json({ error: "Не удалось получить список" });
+      console.error("Ошибка при обновлении hidden:", error);
+      res.status(500).json({ error: "Не удалось обновить комментарий" });
     }
   },
 };

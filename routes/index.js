@@ -1,19 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { UserController, ProductController, LikeController, CommentController, CartController, OrderController } = require('../controllers');
+const { UserController, ProductController, LikeController, CommentController, CartController, OrderController, DiscountController } = require('../controllers');
 const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 const MessageController = require('../controllers/message-controller');
 
 const uploadDestination = 'uploads';
 
-// Показываем, где хранить загружаемые файлы
 const storage = multer.diskStorage({
   destination: uploadDestination,
   filename: function (req, file, cb) {
     const fileExt = file.originalname.split('.').pop();
-    const uniqueName = uuidv4() + '.' + fileExt; // Генерирует что-то вроде `550e8400-e29b-41d4-a716-446655440000.jpg`
+    const uniqueName = uuidv4() + '.' + fileExt; 
     cb(null, uniqueName);
   }
 });
@@ -35,7 +34,6 @@ router.put("/users/:id", authenticateToken, upload.single('avatar'), UserControl
 router.put("/updaterole", authenticateToken, upload.single('avatar'), UserController.updateRole);
 router.delete("/deleteuser", authenticateToken, UserController.deleteUser);
 
-// router.post("/product", authenticateToken, upload.array('avatar', 10), ProductController.createProduct, upload.single('avatar'));
 router.post(
   "/product",
   authenticateToken,
@@ -46,10 +44,8 @@ router.post(
 );
 router.get("/product", authenticateToken, ProductController.getAllProducts);
 router.get("/product/:id", authenticateToken, ProductController.getProductById);
-// router.get("/product", ProductController.getAllProducts);
-// router.get("/product/:id", ProductController.getProductById);
+router.get("/productAll", authenticateToken, ProductController.getAllProductsForAdmin);
 router.delete("/product/:id", authenticateToken, ProductController.deleteProduct);
-// router.put("/product/:id", authenticateToken, upload.array('avatar', 10), ProductController.updateProduct);
 router.put(
   "/product/:id",
   authenticateToken,
@@ -70,25 +66,28 @@ router.delete("/deleteAdminComment/:id", authenticateToken, CommentController.de
 
 router.put("/comments/:id", authenticateToken, CommentController.updateComment);
 
-// router.get('/:productid/comments', CommentController.getAllComments);
 router.get('/comments/:productid', CommentController.getAllComments);
 
 router.get('/commentsvisable/pending', authenticateToken, CommentController.getPendingComments);
 router.put('/comments/moderate/:id', authenticateToken, CommentController.moderateComment);
-
-// router.post("/chat/:id", authenticateToken, ChatController.createChat);
-
-// router.post("/message/:id", authenticateToken, MessageController.createMessage);
-// router.put("/message/:id", authenticateToken, MessageController.updateMessage);
+router.patch("/comments/:id/hidden", authenticateToken, CommentController.setCommentHidden);
 
 router.post('/orders', authenticateToken, OrderController.createOrder);
 router.delete('/orders/:id', authenticateToken, OrderController.deleteOrder);
-router.get('/orders', authenticateToken, OrderController.getUserOrders);       // Все заказы пользователя
+router.get('/orders', authenticateToken, OrderController.getUserOrders);
 router.get('/orders/:id', authenticateToken, OrderController.getOrderById)
 router.post('/orders/check', authenticateToken, OrderController.checkProductAvailability)
+router.patch("/:id/ready", authenticateToken, OrderController.markOrderAsReady);
+router.patch("/:id/given", authenticateToken, OrderController.markOrderAsGiven);
 
 router.get('/admin/orders', authenticateToken, OrderController.getAllOrders);
 router.get('/admin/orders/user/:userId', authenticateToken, OrderController.getOrdersByUserId);
+
+
+router.post("/discount", authenticateToken, DiscountController.createDiscount);
+router.get("/discounts/active", DiscountController.getActiveDiscounts);
+router.delete("/discount/:id", authenticateToken, DiscountController.deleteDiscount);
+router.get("/discounts/all", authenticateToken, DiscountController.getAllDiscounts);
 
 
 

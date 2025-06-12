@@ -126,31 +126,11 @@ const UserController = {
         data: { refreshToken: refreshToken },
       });
 
-      // res.cookie("refreshToken", refreshToken, {
-      //   httpOnly: false,
-      //   maxAge: 5 * 24 * 60 * 60 * 1000, // 5 дней
-      //   // secure: process.env.NODE_ENV === 'production', // в production только через HTTPS
-      //   // sameSite: "strict",
-      // });
-
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         maxAge: 5 * 24 * 60 * 60 * 1000,
-        // secure: false,
-        // sameSite: 'lax',
-        // domain: 'localhost',
-        // sameSite: 'none', не использовать на http
-        // sameSite: 'lax'
-        // secure: true, // Включите для HTTPS
-        // Для кросс-доменных запросов
-        // secure: process.env.NODE_ENV === 'production',
-        // sameSite: "none", // Для кросс-доменных запросов
       });
 
-      // res.cookie("testCookie", "hello", {
-      //   httpOnly: false,
-      //   maxAge: 86400000
-      // });
 
       console.log("Cookie set:", refreshToken);
       res.json({ token });

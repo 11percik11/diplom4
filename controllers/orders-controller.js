@@ -1,7 +1,7 @@
 const { prisma } = require("../prisma/prisma-client");
 
 const OrderController = {
-  createOrder: async (req, res) => {
+createOrder: async (req, res) => {
   try {
     const userId = req.user.userId;
     const { items, deliveryMethod, deliveryAddress } = req.body;
@@ -11,24 +11,37 @@ const OrderController = {
     }
 
     let totalPrice = 0;
+    const now = new Date();
+    const orderItemsData = [];
 
-    // 1. Проверка и расчёт
+    const getMaxActiveDiscount = (discounts) => {
+      return discounts
+        .filter(d => new Date(d.startsAt) <= now && now <= new Date(d.endsAt))
+        .reduce((max, d) => Math.max(max, d.percentage), 0);
+    };
+
     for (const item of items) {
       const product = await prisma.product.findUnique({
         where: { id: item.productId },
-        include: { variants: true },
+        include: {
+          discounts: true,
+          variants: {
+            where: { id: item.variantId },
+            include: { discounts: true },
+          },
+        },
       });
 
       if (!product) {
         return res.status(404).json({ error: `Товар с ID ${item.productId} не найден` });
       }
 
-      const variant = product.variants.find((v) => v.id === item.variantId);
+      const variant = product.variants[0];
       if (!variant) {
-        return res.status(404).json({ error: `Вариант товара не найден` });
+        return res.status(404).json({ error: "Вариант товара не найден" });
       }
 
-      const sizeEntry = variant.sizes.find((s) => s.size === item.size);
+      const sizeEntry = variant.sizes.find(s => s.size === item.size);
       if (!sizeEntry) {
         return res.status(400).json({ error: `Размер ${item.size} не найден у варианта` });
       }
@@ -39,24 +52,43 @@ const OrderController = {
         });
       }
 
-      totalPrice += product.price * item.quantity;
+      const productDiscountValue = getMaxActiveDiscount(product.discounts);
+      const variantDiscountValue = getMaxActiveDiscount(variant.discounts);
+      const bestDiscount = Math.max(productDiscountValue, variantDiscountValue);
+
+      const discountedPrice = product.price * (1 - bestDiscount / 100);
+      const roundedPrice = Math.floor(discountedPrice);
+      const itemTotal = roundedPrice * item.quantity;
+
+      console.log(
+        `[ORDER] ${product.title}: base ${product.price} ₽, discount ${bestDiscount}% → ${roundedPrice} ₽ x ${item.quantity} = ${itemTotal} ₽`
+      );
+
+      totalPrice += itemTotal;
+
+      orderItemsData.push({
+        productId: product.id,
+        variantId: variant.id,
+        quantity: item.quantity,
+        size: item.size,
+        productTitle: product.title,
+        productPrice: roundedPrice,
+        productModel: product.model,
+        variantColor: variant.color,
+      });
     }
 
-    // 2. Создание заказа
+    console.log(`[ORDER] Total price for user ${userId}: ${totalPrice} ₽`);
+
     const order = await prisma.order.create({
       data: {
         userId,
         totalPrice,
         status: "pending",
         deliveryMethod,
-        deliveryAddress: deliveryAddress || null,
+        deliveryAddress: deliveryMethod === "courier" ? deliveryAddress : null,
         items: {
-          create: items.map(({ productId, variantId, quantity, size }) => ({
-            productId,
-            variantId,
-            quantity,
-            size,
-          })),
+          create: orderItemsData,
         },
       },
       include: {
@@ -64,7 +96,6 @@ const OrderController = {
       },
     });
 
-    // 3. Обновление остатков (только нужные варианты)
     for (const item of items) {
       const variant = await prisma.productVariant.findUnique({
         where: { id: item.variantId },
@@ -72,7 +103,7 @@ const OrderController = {
 
       if (!variant) continue;
 
-      const updatedSizes = variant.sizes.map((entry) =>
+      const updatedSizes = variant.sizes.map(entry =>
         entry.size === item.size
           ? { ...entry, quantity: entry.quantity - item.quantity }
           : entry
@@ -85,6 +116,14 @@ const OrderController = {
         },
       });
     }
+
+    await prisma.cartItem.deleteMany({
+      where: {
+        cart: { userId },
+        variantId: { in: items.map(i => i.variantId) },
+        size: { in: items.map(i => i.size) },
+      },
+    });
 
     res.json(order);
   } catch (error) {
@@ -209,35 +248,35 @@ const OrderController = {
     }
   },
 
-getUserOrders: async (req, res) => {
-  try {
-    const userId = req.user.userId;
+  getUserOrders: async (req, res) => {
+    try {
+      const userId = req.user.userId;
 
-    const orders = await prisma.order.findMany({
-      where: { userId },
-      include: {
-        items: {
-          include: {
-            product: true,
-            variant: {
-              include: {
-                images: true, // ✅ получаем изображения из варианта
+      const orders = await prisma.order.findMany({
+        where: { userId },
+        include: {
+          items: {
+            include: {
+              product: true,
+              variant: {
+                include: {
+                  images: true, // ✅ получаем изображения из варианта
+                },
               },
             },
           },
         },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
 
-    res.json(orders);
-  } catch (error) {
-    console.error("Ошибка при получении заказов:", error.message, error);
-    res.status(500).json({ error: "Не удалось получить заказы" });
-  }
-},
+      res.json(orders);
+    } catch (error) {
+      console.error("Ошибка при получении заказов:", error.message, error);
+      res.status(500).json({ error: "Не удалось получить заказы" });
+    }
+  },
 
   // Получить один заказ по ID
   getOrderById: async (req, res) => {
@@ -274,46 +313,51 @@ getUserOrders: async (req, res) => {
   },
 
   getAllOrders: async (req, res) => {
-    try {
-      const userId = req.user.userId;
+  try {
+    const userId = req.user.userId
 
-      // Получить текущего пользователя
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-      });
+    // Получить текущего пользователя
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    })
 
-      if (!user || user.role !== "ADMIN") {
-        return res
-          .status(403)
-          .json({ error: "Доступ запрещён. Только для админа." });
-      }
-
-      const orders = await prisma.order.findMany({
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          items: {
-            include: {
-              product: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-      res.json(orders);
-    } catch (error) {
-      console.error("Ошибка при получении всех заказов:", error.message, error);
-      res.status(500).json({ error: "Не удалось получить все заказы" });
+    // ✅ Разрешаем только ADMIN и MANAGER
+    if (!user || !["ADMIN", "MANAGER"].includes(user.role)) {
+      return res.status(403).json({ error: "Доступ запрещён" })
     }
-  },
+
+    const orders = await prisma.order.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+        items: {
+          include: {
+            product: true,
+            variant: {
+              include: {
+                images: true, // ✅ фотографии варианта
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    })
+
+    res.json(orders)
+  } catch (error) {
+    console.error("Ошибка при получении всех заказов:", error.message, error)
+    res.status(500).json({ error: "Не удалось получить все заказы" })
+  }
+},
 
   getOrdersByUserId: async (req, res) => {
     try {
@@ -363,6 +407,72 @@ getUserOrders: async (req, res) => {
       res
         .status(500)
         .json({ error: "Не удалось получить заказы пользователя" });
+    }
+  },
+
+  markOrderAsReady: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isReady } = req.body;
+      const userId = req.user.userId;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user || !["ADMIN", "MANAGER"].includes(user.role)) {
+        return res
+          .status(403)
+          .json({ error: "Недостаточно прав для действия" });
+      }
+
+      const updatedOrder = await prisma.order.update({
+        where: { id },
+        data: {
+          isReady: Boolean(isReady),
+        },
+      });
+
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error("Ошибка при обновлении isReady:", error.message, error);
+      res.status(500).json({ error: "Не удалось обновить поле isReady" });
+    }
+  },
+
+  markOrderAsGiven: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isGivenToClient } = req.body;
+      const userId = req.user.userId;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user || !["ADMIN", "MANAGER"].includes(user.role)) {
+        return res
+          .status(403)
+          .json({ error: "Недостаточно прав для действия" });
+      }
+
+      const updatedOrder = await prisma.order.update({
+        where: { id },
+        data: {
+          isGivenToClient: Boolean(isGivenToClient),
+        },
+      });
+
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error(
+        "Ошибка при обновлении isGivenToClient:",
+        error.message,
+        error
+      );
+      res
+        .status(500)
+        .json({ error: "Не удалось обновить поле isGivenToClient" });
     }
   },
 };
