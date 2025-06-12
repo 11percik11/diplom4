@@ -9,7 +9,7 @@ services:
       - db
       - react-app
     environment:
-      DATABASE_URL: "mongodb://daniiltest2:password@localhost:27017/mydatabase?authSource=admin&directConnection=true"
+      DATABASE_URL: "mongodb://daniiltest2:password@db:27017/mydatabase?authSource=admin&directConnection=true"
  db: # База данных
     image: prismagraphql/mongo-single-replica:5.0.3
     ports:
