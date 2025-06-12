@@ -18,7 +18,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: daniiltest2
       MONGO_INITDB_ROOT_PASSWORD: password
  react-app: # React-приложение
-    build: ../frontend/my-app # Путь к вашему React-приложению относительно корня вашего проекта
+    build: ../diplom4front # Путь к вашему React-приложению относительно корня вашего проекта
     ports:
       - '80:80' # Порт, на котором будет доступно ваше React-приложение
       - '8000:8000' # Порт, на котором будет доступно ваше React-приложение
