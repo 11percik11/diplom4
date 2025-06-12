@@ -17,10 +17,10 @@ const allowedOrigins = [
   `http://${process.env.BASE_URL}`,
   `http://${process.env.BASE_URL}:80`,
   `http://${process.env.BASE_URL}:3000`,
-  `http://158.160.88.22:3000`,
-  `http://158.160.88.22.214`,
-  `http://158.160.88.22:80`,
-  'http://158.160.88.22:5173',
+  `http://89.169.169.247:3000`,
+  `http://89.169.169.247`,
+  `http://89.169.169.247:80`,
+  'http://89.169.169.247:5173',
   process.env.BASE_URL_FRONT
 ].filter(Boolean);
 
